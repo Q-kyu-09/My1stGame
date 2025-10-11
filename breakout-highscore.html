@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ブロック崩しゲーム（最高記録のみ）</title>
+  <style>
+    body { text-align: center; background: #222; color: #fff; }
+    canvas { background: #111; display: block; margin: 0 auto; }
+    #score, #countdown, #highscore { font-size: 1.2em; margin: 10px; }
+    #countdown { font-size: 2em; color: #f66; }
+    #highscore { background: #333; color: #0ff; padding: 8px; border-radius: 8px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <h1>ブロック崩し</h1>
+  <div id="score">スコア: 0</div>
+  <div id="highscore"></div>
+  <div id="countdown"></div>
+  <canvas id="game" width="480" height="320"></canvas>
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    let score = 0;
+    let gameStarted = false;
+
+    // 最高記録取得・表示
+    function getHighScore() {
+      let hs = localStorage.getItem("breakout_highscore");
+      return hs ? Number(hs) : 0;
+    }
+    function setHighScore(newScore) {
+      localStorage.setItem("breakout_highscore", newScore);
+    }
+    function showHighScore() {
+      const hs = getHighScore();
+      document.getElementById("highscore").innerHTML = `<b>最高記録: ${hs} 点</b>`;
+    }
+    showHighScore();
+
+    // ゲームのパラメータ
+    const ballRadius = 8;
+    let x = canvas.width / 2;
+    let y = canvas.height - 30;
+    let dx = 2;
+    let dy = -2;
+
+    const paddleHeight = 10;
+    const paddleWidth = 75;
+    let paddleX = (canvas.width - paddleWidth) / 2;
+
+    let rightPressed = false;
+    let leftPressed = false;
+
+    // ブロックの設定
+    const brickRowCount = 3;
+    const brickColumnCount = 5;
+    const brickWidth = 75;
+    const brickHeight = 20;
+    const brickPadding = 10;
+    const brickOffsetTop = 30;
+    const brickOffsetLeft = 30;
+
+    let bricks = [];
+    function initBricks() {
+      bricks = [];
+      for(let c=0; c<brickColumnCount; c++) {
+        bricks[c] = [];
+        for(let r=0; r<brickRowCount; r++) {
+          bricks[c][r] = { x: 0, y: 0, status: 1 };
+        }
+      }
+    }
+    initBricks();
+
+    document.addEventListener("keydown", keyDownHandler);
+    document.addEventListener("keyup", keyUpHandler);
+
+    function keyDownHandler(e) {
+      if(e.key === "Right" || e.key === "ArrowRight") {
+        rightPressed = true;
+      }
+      else if(e.key === "Left" || e.key === "ArrowLeft") {
+        leftPressed = true;
+      }
+    }
+    function keyUpHandler(e) {
+      if(e.key === "Right" || e.key === "ArrowRight") {
+        rightPressed = false;
+      }
+      else if(e.key === "Left" || e.key === "ArrowLeft") {
+        leftPressed = false;
+      }
+    }
+
+    function collisionDetection() {
+      for(let c=0; c<brickColumnCount; c++) {
+        for(let r=0; r<brickRowCount; r++) {
+          let b = bricks[c][r];
+          if(b.status == 1) {
+            if(
+              x > b.x && x < b.x+brickWidth &&
+              y > b.y && y < b.y+brickHeight
+            ) {
+              dy = -dy;
+              b.status = 0;
+              score += 10;
+              document.getElementById("score").textContent = "スコア: " + score;
+            }
+          }
+        }
+      }
+    }
+
+    function drawBall() {
+      ctx.beginPath();
+      ctx.arc(x, y, ballRadius, 0, Math.PI*2);
+      ctx.fillStyle = "#f33";
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    function drawPaddle() {
+      ctx.beginPath();
+      ctx.rect(paddleX, canvas.height-paddleHeight, paddleWidth, paddleHeight);
+      ctx.fillStyle = "#09c";
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    function drawBricks() {
+      for(let c=0; c<brickColumnCount; c++) {
+        for(let r=0; r<brickRowCount; r++) {
+          if(bricks[c][r].status == 1) {
+            let brickX = (c*(brickWidth+brickPadding))+brickOffsetLeft;
+            let brickY = (r*(brickHeight+brickPadding))+brickOffsetTop;
+            bricks[c][r].x = brickX;
+            bricks[c][r].y = brickY;
+            ctx.beginPath();
+            ctx.rect(brickX, brickY, brickWidth, brickHeight);
+            ctx.fillStyle = "#ff0";
+            ctx.fill();
+            ctx.closePath();
+          }
+        }
+      }
+    }
+
+    function allBricksDestroyed() {
+      for(let c=0; c<brickColumnCount; c++) {
+        for(let r=0; r<brickRowCount; r++) {
+          if(bricks[c][r].status == 1) return false;
+        }
+      }
+      return true;
+    }
+
+    function draw() {
+      if (!gameStarted) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBricks();
+      drawBall();
+      drawPaddle();
+      collisionDetection();
+
+      // 全部崩したら復活！
+      if (allBricksDestroyed()) {
+        setTimeout(() => {
+          initBricks();
+        }, 500);
+      }
+
+      // 壁・バーとの当たり判定
+      if(x + dx > canvas.width - ballRadius || x + dx < ballRadius) {
+        dx = -dx;
+      }
+      if(y + dy < ballRadius) {
+        dy = -dy;
+      } else if(y + dy > canvas.height - ballRadius) {
+        if(x > paddleX && x < paddleX + paddleWidth) {
+          dy = -dy;
+        } else {
+          // 最高記録なら保存
+          if (score > getHighScore()) {
+            setHighScore(score);
+            alert("ゲームオーバー！\n新記録: " + score + " 点");
+          } else {
+            alert("ゲームオーバー！\nスコア: " + score + " 点");
+          }
+          showHighScore();
+          document.location.reload();
+        }
+      }
+
+      // バー操作
+      if(rightPressed && paddleX < canvas.width - paddleWidth) {
+        paddleX += 5;
+      }
+      else if(leftPressed && paddleX > 0) {
+        paddleX -= 5;
+      }
+
+      x += dx;
+      y += dy;
+      requestAnimationFrame(draw);
+    }
+
+    // 開始カウントダウン
+    function startCountdown() {
+      let count = 3;
+      document.getElementById("countdown").textContent = count;
+      let countdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          document.getElementById("countdown").textContent = count;
+        } else if (count === 0) {
+          document.getElementById("countdown").textContent = "スタート！";
+        } else {
+          clearInterval(countdownInterval);
+          document.getElementById("countdown").textContent = "";
+          gameStarted = true;
+          draw();
+        }
+      }, 1000);
+    }
+
+    // 初期状態はゲーム停止、カウントダウン開始
+    startCountdown();
+    // draw()はカウントダウン後に自動的に呼び出されます
+
+  </script>
+</body>
+</html>
